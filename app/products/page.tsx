@@ -3,8 +3,10 @@
 import type { Product } from "../types/types";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+
+import { useCategories } from "../contexts/CategoriesContext";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,24 +25,24 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
+// Define proper types for category and subcategory
+type SubCategory = {
+  id: number;
+  name: string;
+};
+
+type Category = {
+  id: number;
+  name: string;
+  subCategories?: SubCategory[];
+  subcategories?: SubCategory[];
+  sub_categories?: SubCategory[];
+};
+
 type CategoryFilter = {
   category?: number | null;
   subcategory?: number | null;
 };
-
-interface Subcategory {
-  id: number;
-  name: string;
-  description: string;
-  categoryid: number;
-}
-
-interface Category {
-  id: number;
-  name: string;
-  description: string;
-  subcategories: Subcategory[];
-}
 
 function LoadingAnimation() {
   return (
@@ -60,22 +62,23 @@ function LoadingAnimation() {
 
 function ShopContent() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { categories } = useCategories();
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCategoriesLoading, setIsCategoriesLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalProducts, setTotalProducts] = useState<number>(0);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { setCart } = useCart();
   const { user } = useUser();
+
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<number | null>(
     null
   );
   const [error, setError] = useState<boolean>(false);
   const [priceRange, setPriceRange] = useState<number[]>([0, 1000]);
-  //const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>("newest");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [layoutView, setLayoutView] = useState<"grid" | "list">("list");
@@ -98,6 +101,13 @@ function ShopContent() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Update categories loading state when categories change
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      setIsCategoriesLoading(false);
+    }
+  }, [categories]);
+
   useEffect(() => {
     const categoryId = searchParams.get("category")
       ? Number.parseInt(searchParams.get("category") as string, 10)
@@ -118,10 +128,6 @@ function ShopContent() {
   }, [searchParams, page]);
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  useEffect(() => {
     if (user) {
       fetchCartItems();
     }
@@ -130,21 +136,27 @@ function ShopContent() {
   async function fetchProducts(filter: CategoryFilter, currentPage: number) {
     try {
       setIsLoading(true);
+
       const queryParams = new URLSearchParams({
         page: currentPage.toString(),
-        ...(filter.category !== null &&
-          filter.category !== undefined && {
-            category: filter.category.toString(),
-          }),
-        ...(filter.subcategory !== null &&
-          filter.subcategory !== undefined && {
-            subcategory: filter.subcategory.toString(),
-          }),
       });
 
+      if (filter.category !== null && filter.category !== undefined) {
+        queryParams.append("category", filter.category.toString());
+      }
+
+      if (filter.subcategory !== null && filter.subcategory !== undefined) {
+        queryParams.append("subcategory", filter.subcategory.toString());
+      }
+
       const response = await fetch(`/api/products?${queryParams.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
       const fetchedProductsData = await response.json();
-      console.log(fetchedProductsData);
+
       setProducts(fetchedProductsData.products);
       setTotalProducts(fetchedProductsData.totalProducts);
       setTotalPages(fetchedProductsData.totalPages);
@@ -153,21 +165,6 @@ function ShopContent() {
       setError(true);
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function fetchCategories() {
-    try {
-      setIsCategoriesLoading(true);
-      const response = await fetch(`/api/products/categories`);
-      const data = await response.json();
-
-      setCategories(data);
-      setError(false);
-    } catch (error) {
-      setError(true);
-    } finally {
-      setIsCategoriesLoading(false);
     }
   }
 
@@ -192,14 +189,40 @@ function ShopContent() {
     );
   };
 
+  // Update URL when filters change to make them bookmarkable
+  const updateUrlWithFilters = (
+    category: number | null,
+    subcategory: number | null
+  ) => {
+    const params = new URLSearchParams();
+
+    if (category !== null) {
+      params.set("category", category.toString());
+    }
+
+    if (subcategory !== null) {
+      params.set("subcategory", subcategory.toString());
+    }
+
+    const queryString = params.toString();
+    const url = queryString ? `?${queryString}` : "";
+
+    // Use router.replace to update URL without full page reload
+    router.replace(`/products${url}`);
+  };
+
   const handleCategoryChange = (categoryId: number) => {
     if (selectedCategory === categoryId) {
+      // Deselect category
       setSelectedCategory(null);
       setSelectedSubcategory(null);
+      updateUrlWithFilters(null, null);
       fetchProducts({ category: null, subcategory: null }, 1);
     } else {
+      // Select category
       setSelectedCategory(categoryId);
       setSelectedSubcategory(null);
+      updateUrlWithFilters(categoryId, null);
       fetchProducts({ category: categoryId, subcategory: null }, 1);
     }
     setPage(1);
@@ -207,10 +230,14 @@ function ShopContent() {
 
   const handleSubcategoryChange = (subcategoryId: number) => {
     if (selectedSubcategory === subcategoryId) {
+      // Deselect subcategory
       setSelectedSubcategory(null);
+      updateUrlWithFilters(selectedCategory, null);
       fetchProducts({ category: selectedCategory, subcategory: null }, 1);
     } else {
+      // Select subcategory
       setSelectedSubcategory(subcategoryId);
+      updateUrlWithFilters(selectedCategory, subcategoryId);
       fetchProducts(
         { category: selectedCategory, subcategory: subcategoryId },
         1
@@ -236,6 +263,38 @@ function ShopContent() {
   if (error) {
     return <div>Error loading products. Please try again later.</div>;
   }
+
+  // Function to get subcategories regardless of property name
+  const getSubcategories = (category: Category | undefined): SubCategory[] => {
+    if (!category) return [];
+
+    if (category.subCategories && Array.isArray(category.subCategories)) {
+      return category.subCategories;
+    }
+    if (category.subcategories && Array.isArray(category.subcategories)) {
+      return category.subcategories;
+    }
+    if (category.sub_categories && Array.isArray(category.sub_categories)) {
+      return category.sub_categories;
+    }
+
+    return [];
+  };
+
+  // Find the selected category object
+  const selectedCategoryObject = categories?.find(
+    (c) => c.id === selectedCategory
+  );
+
+  // Get subcategories for the selected category
+  const subcategoriesForSelectedCategory = getSubcategories(
+    selectedCategoryObject
+  );
+
+  // Find the selected subcategory object
+  const selectedSubcategoryObject = subcategoriesForSelectedCategory.find(
+    (s) => s.id === selectedSubcategory
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-gradient-to-b from-gray-50 to-white">
@@ -319,47 +378,63 @@ function ShopContent() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {categories.map((category) => (
-                    <div key={category.id} className="space-y-3">
-                      <button
-                        className={`text-base font-semibold ${
-                          selectedCategory === category.id
-                            ? "text-primary"
-                            : "text-gray-800"
-                        } hover:text-primary transition-colors w-full text-left`}
-                        onClick={() => handleCategoryChange(category.id)}
-                      >
-                        {category.name}
-                      </button>
+                  {categories && categories.length > 0 ? (
+                    categories.map((category) => {
+                      const subcategories = getSubcategories(category);
 
-                      <div className="ml-3 space-y-2">
-                        {category.subcategories.map((subcategory) => (
-                          <div
-                            key={subcategory.id}
-                            className="flex items-center"
+                      return (
+                        <div key={category.id} className="space-y-3">
+                          <button
+                            className={`text-base font-semibold ${
+                              selectedCategory === category.id
+                                ? "text-primary"
+                                : "text-gray-800"
+                            } hover:text-primary transition-colors w-full text-left`}
+                            onClick={() => handleCategoryChange(category.id)}
                           >
-                            <Checkbox
-                              checked={selectedSubcategory === subcategory.id}
-                              id={`subcat-${subcategory.id}`}
-                              onCheckedChange={() =>
-                                handleSubcategoryChange(subcategory.id)
-                              }
-                            />
-                            <Label
-                              className={`ml-2 cursor-pointer ${
-                                selectedSubcategory === subcategory.id
-                                  ? "text-primary font-medium"
-                                  : "text-gray-600"
-                              }`}
-                              htmlFor={`subcat-${subcategory.id}`}
-                            >
-                              {subcategory.name}
-                            </Label>
+                            {category.name}
+                          </button>
+
+                          <div className="ml-3 space-y-2">
+                            {subcategories.length > 0 ? (
+                              subcategories.map((subcategory) => (
+                                <div
+                                  key={subcategory.id}
+                                  className="flex items-center"
+                                >
+                                  <Checkbox
+                                    checked={
+                                      selectedSubcategory === subcategory.id
+                                    }
+                                    id={`subcat-${subcategory.id}`}
+                                    onCheckedChange={() =>
+                                      handleSubcategoryChange(subcategory.id)
+                                    }
+                                  />
+                                  <Label
+                                    className={`ml-2 cursor-pointer ${
+                                      selectedSubcategory === subcategory.id
+                                        ? "text-primary font-medium"
+                                        : "text-gray-600"
+                                    }`}
+                                    htmlFor={`subcat-${subcategory.id}`}
+                                  >
+                                    {subcategory.name}
+                                  </Label>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500">
+                                No subcategories
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div>No categories available</div>
+                  )}
                 </div>
               )}
             </div>
@@ -372,6 +447,17 @@ function ShopContent() {
           <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm">
             <div className="text-sm font-medium text-gray-600">
               Showing {products.length} out of {totalProducts} results
+              {selectedCategory && (
+                <span className="ml-1">
+                  for category: <strong>{selectedCategoryObject?.name}</strong>
+                  {selectedSubcategory && selectedSubcategoryObject && (
+                    <span className="ml-1">
+                      and subcategory:{" "}
+                      <strong>{selectedSubcategoryObject.name}</strong>
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
             {/* Only show layout toggle on tablet and larger screens */}
             <div className="hidden md:flex space-x-2">
@@ -462,7 +548,7 @@ function ShopContent() {
               ))
             ) : (
               <div className="col-span-full text-center py-12 text-gray-500">
-                No products found
+                No products found for the selected filters
               </div>
             )}
           </div>
