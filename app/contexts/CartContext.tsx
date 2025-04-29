@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, {
+  createContext,
+  useState,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import { Cart } from "../types/types";
 
@@ -22,14 +28,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return {};
   });
 
+  const contextValue = useMemo(() => ({ cart, setCart }), [cart]);
+
   useEffect(() => {
     localStorage.setItem("cart", JSON.stringify(cart));
   }, [cart]);
 
   return (
-    <CartContext.Provider value={{ cart, setCart }}>
-      {children}
-    </CartContext.Provider>
+    <CartContext.Provider value={contextValue}>{children}</CartContext.Provider>
   );
 }
 

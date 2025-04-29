@@ -25,6 +25,7 @@ import {
   Home,
   Info,
 } from "lucide-react";
+import React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -543,3 +544,25 @@ function NavLink({
     </Link>
   );
 }
+
+const SearchResults = React.memo(
+  ({ results }: { results: SearchResults[] }) => {
+    SearchResults.displayName = "SearchResults";
+
+    return (
+      <div className="search-results">
+        {results.map((result) => (
+          <div
+            key={result.id}
+            className="p-2 hover:bg-accent rounded-md cursor-pointer"
+          >
+            <h4 className="font-medium">{result.title}</h4>
+            <p className="text-sm text-muted-foreground">
+              {result.description}
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+);

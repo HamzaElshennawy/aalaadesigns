@@ -72,38 +72,27 @@ export default function Signup() {
     password: string
   ): Promise<void> {
     setIsSigningin(true);
-    const myHeaders = new Headers();
-
-    myHeaders.append("Content-Type", "application/json");
-
-    const raw = JSON.stringify({
-      username,
-      email,
-      password,
-    });
-
-    const requestOptions: RequestInit = {
-      method: "POST",
-      headers: myHeaders,
-      body: raw,
-      redirect: "follow",
-    };
-
     try {
-      const response = await fetch("/api/signup", requestOptions);
+      const response = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      });
 
-      if (response.status === 200) {
-        const result = await response.text();
+      const result = await response.json();
 
-        const parsedJson = JSON.parse(result);
-
-        localStorage.setItem("user", JSON.stringify(parsedJson));
-        setUser(parsedJson);
-        setIsSigningin(false);
+      if (response.ok) {
+        localStorage.setItem("user", JSON.stringify(result));
+        setUser(result);
         router.push("../");
+      } else {
+        setError(true);
+        setFormError(result.message || "Registration failed");
       }
     } catch (error) {
       setError(true);
+      setFormError("An unexpected error occurred");
+    } finally {
       setIsSigningin(false);
     }
   }
@@ -156,8 +145,12 @@ export default function Signup() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-sm space-y-2 sm:space-y-0">
-                      <Link className="text-blue-600" href="/Auth/sign-in">
-                        Already have an account? Sign in
+                      <Link href="/Auth/sign-in">
+                        <span className="text-gray-600">
+                          Already have an account?
+                        </span>
+                        <span>{"  "}</span>
+                        <span className="text-blue-600"> Sign in</span>
                       </Link>
                       <Link className="text-blue-600" href="#">
                         Terms & Conditions

@@ -8,15 +8,15 @@ const AppWrapper = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Replace setTimeout with actual loading check
     const handleComplete = () => {
-      //set delay for the logo animation
-      setTimeout(() => {
+      if (document.readyState === "complete") {
         setLoading(false);
-      }, 6000);
+      }
     };
 
-    if (document.readyState === "complete") handleComplete();
-    else window.addEventListener("load", handleComplete);
+    handleComplete(); // Check immediately
+    window.addEventListener("load", handleComplete);
 
     return () => window.removeEventListener("load", handleComplete);
   }, []);

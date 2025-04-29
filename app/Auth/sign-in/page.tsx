@@ -67,41 +67,29 @@ export default function Signin() {
 
   async function signinUser(email: string, password: string): Promise<void> {
     setIsSigningin(true);
-    const myHeaders = new Headers();
-
-    myHeaders.append("Content-Type", "application/json");
-
-    const raw = JSON.stringify({
-      email: { email },
-      password: { password },
-    });
-
-    const requestOptions: RequestInit = {
-      method: "POST",
-      headers: myHeaders,
-      body: raw,
-      redirect: "follow",
-    };
-
     try {
-      const response = await fetch("/api/signin", requestOptions);
+      const response = await fetch("/api/signin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-      if (response.status === 200) {
-        const result = await response.text();
-        const parsedJson = JSON.parse(result);
+      const result = await response.json();
 
-        localStorage.setItem("user", JSON.stringify(parsedJson[0]));
-        setUser(parsedJson[0]); // Update the user context
+      if (response.ok) {
+        localStorage.setItem("user", JSON.stringify(result[0]));
+        setUser(result[0]);
         setError(false);
         setFormError("");
-        setIsSigningin(false);
         router.push("../");
       } else {
-        setIsSigningin(false);
         setError(true);
+        setFormError(result.message || "Authentication failed");
       }
     } catch (error) {
       setError(true);
+      setFormError("An unexpected error occurred");
+    } finally {
       setIsSigningin(false);
     }
   }
@@ -151,8 +139,9 @@ export default function Signin() {
                       onValueChange={setPasswordValue}
                     />
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-sm space-y-2 sm:space-y-0">
-                      <Link className="text-blue-600" href="/Auth/sign-up">
-                        No Account? Sign up
+                      <Link href="/Auth/sign-up">
+                        <span className="text-gray-600">No Account? </span>
+                        <span className="text-blue-600">Sign up</span>
                       </Link>
                       <Link
                         className="text-blue-600"
